@@ -1,0 +1,146 @@
+/*
+  Salvatore Criscione 2014-2015
+  
+  Lego nxt sumo , Primo software di prova...
+
+
+  Il software deve girare su se stesso dopo una pausa di 5 secondi,
+  
+  Funziona in questo modo , praticamente dusando il sensore ultrarossi
+  
+  
+  di default il robot gira da sokverso orario, quindi cerca di spingere fuori gli avversari
+  
+ */
+
+#define MOTOR_DEX OUT_C
+#define MOTOR_SIX OUT_B
+#define MOTOR_AUX OUT_A
+
+#define S_SPIN_R    1
+#define S_SPIN_L    2
+#define S_SPIN      3
+#define S_MOVE_F    4
+#define S_MOVE_B    5
+
+
+#define TS_LONG     40
+#define TS_NEAR     15
+#define TS_SPIN     -1
+
+
+int dd, hope_a, hope_b;
+unsigned int time;
+
+mutex moveMutex;
+
+int borders();
+int sensors();
+
+void move(int a, int b);
+
+task Moving() {
+
+     PlayFileEx("DarthVader_001.rmd", 4, true);
+     
+     Wait(4800);
+     OnFwd(MOTOR_AUX, 80);
+     Wait(200);
+     Off(MOTOR_AUX);
+     while(1) {
+     time = CurrentTick();
+     
+     
+     
+     switch(dd) {
+        case S_SPIN_R:
+           Acquire(moveMutex);
+           move(-80, 80);
+           Release(moveMutex);
+           TextOut(1, LCD_LINE4, "nothing :(");
+           break;
+        case S_MOVE_F:
+           Acquire(moveMutex);
+           move(100, 90);
+           Release(moveMutex);
+           TextOut(1, LCD_LINE4, "LONTANO MF");
+           break;
+        case S_SPIN:
+           Acquire(moveMutex);
+           move(100, -100);
+           Wait(1000);
+           Release(moveMutex);
+           
+           TextOut(1, LCD_LINE4, "VICINO VICINO D:");
+           break;
+        case S_MOVE_B:
+           Acquire(moveMutex);
+           move(-100, -100);
+           Release(moveMutex);
+           TextOut(1, LCD_LINE4, "BORDO AIUTOOOO");
+           break;
+        case S_SPIN_L:
+           Acquire(moveMutex);
+           move(-100, 100);
+           Release(moveMutex);
+           TextOut(1, LCD_LINE4, "MOTORE SOTTOSFORZO D:");
+           break;
+        default:
+           Acquire(moveMutex);
+           move(-90, 90);
+           Release(moveMutex);
+           break; // useless :(:/(
+     }
+     }
+           
+}
+
+task Sensors() {
+    // 0 nothing found
+    // 1 faraway
+    // 2 front near
+    // -1 border :(:(:(:(
+    /*
+    Funzione che si preffige di riuscire a dare un output
+    */
+    int baseline = Sensor(S2);
+    bool checkLine = false;
+    while(1) {
+    hope_a = abs(MotorActualSpeed(MOTOR_SIX));
+    hope_b = abs(MotorActualSpeed(MOTOR_DEX));
+
+    checkLine = (Sensor(S2) > (checkLine+10));
+    if ( Sensor(S1) > baseline )
+    {
+       dd = S_MOVE_B;
+    }  else {
+       if ( SENSOR_3 == 1 ) {
+          dd = S_SPIN_L;
+       }else {
+       if ( SENSOR_3 == 0 )
+          dd = S_SPIN_R;
+       if ( SensorUS(S2) < TS_LONG )
+          if ( SensorUS(S2) < TS_NEAR )
+              dd = S_SPIN;
+          else
+              dd = S_MOVE_F;
+       else
+          dd = S_SPIN_R;
+       }
+    }
+    }
+}
+
+task main() {
+     SetSensorLight(S1);
+     SetSensorUltrasonic(S2);
+     SetSensorTouch(S3);
+     Precedes(Sensors, Moving);
+}
+
+void move(int a, int b) {
+     OnFwd(MOTOR_SIX, a);
+     OnFwd(MOTOR_DEX, b);
+     Wait(200);
+}
+
