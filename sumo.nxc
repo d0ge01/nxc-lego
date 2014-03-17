@@ -1,21 +1,25 @@
 /*
   Salvatore Criscione 2014-2015
-  
+
   Lego nxt sumo , Primo software di prova...
 
 
   Il software deve girare su se stesso dopo una pausa di 5 secondi,
-  
+
   Funziona in questo modo , praticamente dusando il sensore ultrarossi
-  
-  
+
+
   di default il robot gira da sokverso orario, quindi cerca di spingere fuori gli avversari
-  
+
  */
 
 #define MOTOR_DEX OUT_C
 #define MOTOR_SIX OUT_B
 #define MOTOR_AUX OUT_A
+
+#define SENSOR_T    S3
+#define SENSOR_U    S2
+#define SENSOR_L    S1
 
 #define S_SPIN_R    1
 #define S_SPIN_L    2
@@ -28,8 +32,10 @@
 #define TS_NEAR     15
 #define TS_SPIN     -1
 
+#define FAST        50
+#define SLOW        50
 
-int dd, hope_a, hope_b;
+int dd, hope_a, hope_b, S_LUCE;
 unsigned int time;
 
 mutex moveMutex;
@@ -38,61 +44,66 @@ int borders();
 int sensors();
 
 void move(int a, int b);
+void print(int riga, string testo, int numero);
+void inizializza();
+bool checkOverload();
+void neon();
+
+task ControlLine() {
+     while(1) {
+              if ( Sensor(SENSOR_L) &gt; S_LUCE ) {
+                 // Forza al istante l'acquisizione dei motori
+                 Acquire(moveMutex);
+                 move(-FAST, -FAST);
+                 Wait(1000);
+                 Release(moveMutex);
+              }
+              Wait(100);
+     }
+}
 
 task Moving() {
-
-     PlayFileEx("DarthVader_001.rmd", 4, true);
-     
      Wait(4800);
      OnFwd(MOTOR_AUX, 80);
      Wait(200);
      Off(MOTOR_AUX);
      while(1) {
-     time = CurrentTick();
-     
-     
-     
      switch(dd) {
         case S_SPIN_R:
            Acquire(moveMutex);
-           move(-80, 80);
+           move(-SLOW, SLOW);
            Release(moveMutex);
-           TextOut(1, LCD_LINE4, "nothing :(");
+           print(1, "NIENTE", 0);
            break;
         case S_MOVE_F:
            Acquire(moveMutex);
-           move(100, 90);
+           move(FAST, FAST);
            Release(moveMutex);
-           TextOut(1, LCD_LINE4, "LONTANO MF");
+           print(1, "MI AVVICINO", 0);
            break;
         case S_SPIN:
            Acquire(moveMutex);
-           move(100, -100);
+           move(FAST, -FAST);
            Wait(1000);
            Release(moveMutex);
-           
-           TextOut(1, LCD_LINE4, "VICINO VICINO D:");
-           break;
-        case S_MOVE_B:
-           Acquire(moveMutex);
-           move(-100, -100);
-           Release(moveMutex);
-           TextOut(1, LCD_LINE4, "BORDO AIUTOOOO");
+
+           print(1, "VICINO GIRO :D", 0);
            break;
         case S_SPIN_L:
            Acquire(moveMutex);
-           move(-100, 100);
+           move(-FAST, FAST);
            Release(moveMutex);
-           TextOut(1, LCD_LINE4, "MOTORE SOTTOSFORZO D:");
+           print(1, "INVERTO GIRO", 0);
            break;
         default:
            Acquire(moveMutex);
-           move(-90, 90);
+           move(-SLOW, SLOW);
            Release(moveMutex);
+           print(1, ":( NIENTE DI NIENTE", 0);
            break; // useless :(:/(
      }
      }
-           
+
 }
 
 task Sensors() {
@@ -100,42 +111,35 @@ task Sensors() {
     // 1 faraway
     // 2 front near
     // -1 border :(:(:(:(
-    /*
-    Funzione che si preffige di riuscire a dare un output
-    */
-    int baseline = Sensor(S2);
-    bool checkLine = false;
-    while(1) {
-    hope_a = abs(MotorActualSpeed(MOTOR_SIX));
-    hope_b = abs(MotorActualSpeed(MOTOR_DEX));
 
-    checkLine = (Sensor(S2) > (checkLine+10));
-    if ( Sensor(S1) > baseline )
-    {
-       dd = S_MOVE_B;
-    }  else {
-       if ( SENSOR_3 == 1 ) {
-          dd = S_SPIN_L;
-       }else {
-       if ( SENSOR_3 == 0 )
-          dd = S_SPIN_R;
-       if ( SensorUS(S2) < TS_LONG )
-          if ( SensorUS(S2) < TS_NEAR )
-              dd = S_SPIN;
-          else
-              dd = S_MOVE_F;
-       else
-          dd = S_SPIN_R;
-       }
-    }
+    while(1) {
+
+             if ( SENSOR_T == 1 ) {
+                dd = S_SPIN;
+             }else {
+                   if ( SENSOR_3 == 0 )
+                      if ( checkOverload() ) {
+                         dd = S_SPIN_L;
+                      } else {
+                         dd = S_SPIN;
+                      }
+                   if ( SensorUS(S2) &lt; TS_LONG )
+                      if ( SensorUS(S2) &lt; TS_NEAR )
+                         dd = S_SPIN;
+                      else
+                         dd = S_MOVE_F;
+                   else
+                      dd = S_SPIN_R;
+             }
     }
 }
 
 task main() {
-     SetSensorLight(S1);
-     SetSensorUltrasonic(S2);
-     SetSensorTouch(S3);
-     Precedes(Sensors, Moving);
+     neon();
+     inizializza();
+     S_LUCE = Sensor(SENSOR_L) + 15;
+
+     Precedes(Sensors, Moving, ControlLine);
 }
 
 void move(int a, int b) {
@@ -144,3 +148,36 @@ void move(int a, int b) {
      Wait(200);
 }
 
+void print(int riga, string testo, int numero) {
+     int lnum=(8-riga)*8;
+     ClearLine(lnum);
+     TextOut(0, lnum, testo);
+     if ( numero ) NumOut(6*strlen(testo), lnum, numero);
+}
+
+
+void inizializza() {
+     SetSensorUltrasonic(SENSOR_U);
+     SetSensorLight(SENSOR_L);
+}
+
+bool checkOverload() {
+     hope_a = MotorRotationCount(MOTOR_DEX);
+     Wait(100);
+     hope_b = MotorRotationCount(MOTOR_DEX);
+     if ( hope_b &gt;= hope_a-30 || hope_b &lt; hope_a+30 )
+        return true;
+     else
+        return false;
+}
+
+
+void neon() {
+     for ( int i = 0 ; i &lt; 5; i++ ) {
+         SetSensorType(SENSOR_L, IN_TYPE_LIGHT_ACTIVE);
+         Wait(480);
+         SetSensorType(SENSOR_L, IN_TYPE_LIGHT_INACTIVE);
+         Wait(480);
+     }
+     SetSensorType(SENSOR_L, IN_TYPE_LIGHT_ACTIVE);
+}
