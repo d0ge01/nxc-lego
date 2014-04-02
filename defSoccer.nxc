@@ -1,103 +1,46 @@
 /*
- * Salvatore Criscione 2013-2014
+ * Salvatore Criscione & Matteo Mazzon  2013-2014
  * <not.salvatore@logorroici.org>
  *
  * Difensore NXC Soccer
  *
  */
 
-// Motore destro
-#define MOTOR_D OUT_B
-
-// Motore sinistro
-#define MOTOR_S OUT_C
+void HTEnhancedIRSeekerV2(const byte  port, int &dir, int &strength);
+void turnRight();void turnLeft();void println(string what, int num);
+int iSeeBlack(int GREEN);void goBackBlack();
+int dir, int strength;
 
 // Motore barriera
-#define MOTOR_A OUT_A
+#define BARRIERA OUT_A
 
+#define POWER 55
+#define OVERPOWER 100
 
-
-#define DAVANTI   1
-#define DESTRA    2
-#define SINISTRA  3
-#define SPIN      4
-
-#define AVANTI    1
-#define INDIETRO  0
-
-
-#define M_FAST    100
-#define M_SLOW    50
-#define M_INV     -100
-/*
- * SENSOR_C     Sensore Bussola
- * SENSOR_L     Sensore Luce
- * SENSOR_I     Sensore Infrarossi
- *
- */
-
-#define SENSOR_C  S3
-#define SENSOR_L  S2
-#define SENSOR_I  S1
-
-int dir, vers, baseline,dd,  pot, cal, ownGoal, currentCompass, relBearing;
-
-mutex moveMutex;
-
-void HTEnhancedIRSeekerV2(const byte  port, int &dir, int &strength);
-void move(int a, int b);
-void println(string what, int num);
-
-task nowSensor() {
-  while (1) {
-    baseline = Sensor(SENSOR_L);
-
-    currentCompass=SensorHTCompass(SENSOR_C);
-
-    HTEnhancedIRSeekerV2(SENSOR_I, dd, pot);
-
-    if ( baseline < cal - 15 )
-      vers = INDIETRO;
-    else {
-      if ( dd < 5 ) {
-        println("Vado a sinistra", 0);
-        dir = SINISTRA;
-      }
-      if ( dd > 5 ) {
-        println("Vado a destra", 0);
-        dir = DESTRA;
-      }
-      if ( dd == 5 ) {
-        println("Vado avanti", 0);
-        dir = DAVANTI;
-      }
-      Wait(100);
-    }
-  }
-}
-
-task moving() {
-     while(1){
-       switch(dir) {
-         case DAVANTI:
-           move(M_FAST, M_FAST);
-           break;
-         case DESTRA:
-           move(M_FAST, M_SLOW);
-           break;
-         case SINISTRA:
-           move(M_SLOW, M_FAST);
-           break;
-       }
-     }
-}
 
 task main(){
-   setSensorCompass();
-   SetSensorLight(S2);
-   cal = Sensor(S2);
-   Precedes(moving,nowSensor);
+   SetSensorLight(IN_2);
+   SetSensorLowspeed(S1);
+   int GREEN=Sensor(IN_2);
+   PlayToneEx(012,100,2,FALSE);
+   Wait(99);
+   PlayToneEx(405,100,2,FALSE);
+      while(true){
+      HTEnhancedIRSeekerV2(S1,dir,strength);
+      Off(OUT_ABC);
+      OnFwd(BARRIERA,OVERPOWER);
+      OnFwd(OUT_BC,POWER);
+      println("DIR",dir);
+      if (dir==7||dir==8||dir==9)
+         turnRight();
+      if (dir==3||dir==2||dir==1)
+         turnLeft();
+      if (iSeeBlack(GREEN)==0)
+         goBackBlack();
+      }
 }
+
+///////////////////////////////////////////////////////////////////////////////
 
 void HTEnhancedIRSeekerV2(const byte  port, int &dir, int &strength) {
   int cResp;
@@ -150,18 +93,41 @@ void HTEnhancedIRSeekerV2(const byte  port, int &dir, int &strength) {
   }
 }
 
+///////////////////////////////////////////////////////////////////////////////
+
 void println(string what, int num){
      ClearScreen();
      TextOut(10,LCD_LINE5,what);
      NumOut(10,LCD_LINE6,num);
 }
 
-void move(int a, int b) {
-     Acquire(moveMutex);
-     if ( vers == 0 )
-     if ( a != 0 )
-        OnFwd(MOTOR_D, a);
-     if ( b != 0 )
-        OnFwd(MOTOR_S, b);
-     Release(moveMutex);
+void turnRight(){
+     Off(OUT_BC);
+     OnFwd(OUT_B,POWER);
+     OnFwd(OUT_C,-POWER);
+     return;
+}
+
+void turnLeft(){
+     Off(OUT_BC);
+     OnFwd(OUT_B,-POWER);
+     OnFwd(OUT_C,POWER);
+     return;
+}
+
+int iSeeBlack(int GREEN){
+    if (Sensor(IN_2)<GREEN-5 || Sensor(IN_2) > GREEN+10){
+       Off(OUT_ABC);
+       return 0;
+       }
+    else
+        return 1;
+    }
+    
+void goBackBlack(){
+     Off(OUT_ABC);
+     OnFwd(OUT_BC,-OVERPOWER);
+     Wait(320);
+     Off(OUT_ABC);
+     return;
 }

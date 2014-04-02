@@ -1,93 +1,162 @@
+/*
+ * Salvatore Criscione 2013-2014
+ * <not.salvatore@logorroici.org>
+ *
+ * Difensore NXC Soccer
+ *
+ */
 
-int ownGoal, currentCompass, relBearing, dir, pot, cal,dd;
+// Motore destro
+#define MOTOR_D OUT_C
+
+// Motore sinistro
+#define MOTOR_S OUT_B
+
+// Motore aux
+#define MOTOR_A OUT_A
+
+
+
+#define DAVANTI   1
+#define DESTRA    2
+#define SINISTRA  3
+#define INDIETRO  4
+#define SPIN      5
+#define DAVANTILENTO 6
+
+
+#define M_FAST    90
+#define M_SLOW    50
+#define M_INV_F   -100
+#define M_INV_S   -50
+
+/*
+ * SENSOR_C     Sensore Bussola
+ * SENSOR_L     Sensore Luce
+ * SENSOR_I     Sensore Infrarossi
+ *
+ */
+
+#define SENSOR_C  S3
+#define SENSOR_L  S2
+#define SENSOR_I  S1
+
+int dir, strength, dd, ownGoal, currentCompass, relBearing, baseline;
+bool possesso;
+
 mutex moveMutex;
 
-void HTEnhancedIRSeekerV2(const byte  port, int &dir, int &strength);
-
-void move(int a, int b) {
-     Acquire(moveMutex);
-     if ( a != 0 )
-        OnFwd(OUT_B, a);
-     if ( b != 0 )
-         OnFwd(OUT_C, b);
-     Wait(200);
-     Release(moveMutex);
-}
-
-void println(string what, int num) {
-     ClearScreen();
-     TextOut(10,LCD_LINE5,what);
-     NumOut(10,LCD_LINE6,num);
-}
+void HTEnhancedIRSeekerV2(const byte  port);
+void move(int a, int b);
+void println(string what, int num, int num2);
 
 sub setSensorCompass (){
-   SetSensorLowspeed(S3);
-   TextOut(0,LCD_LINE1, "Point to goal" );
-   TextOut(0,LCD_LINE3, "Press Orange " );
-   TextOut(0,LCD_LINE4, "button" );
-   until(ButtonPressed(BTN4, true));
-   ownGoal=SensorHTCompass(S3);
+   ownGoal=SensorHTCompass(SENSOR_C);
    ClearScreen();
    TextOut(0,LCD_LINE3, "Setting course");
    Wait(100);
-   }
-
-task nowSensorCompass(){
-   while(1) {
- //   ClearScreen();
-      currentCompass=SensorHTCompass(S3);
-      ownGoal = SensorHTCompass(S3);
- //   NumOut(10,LCD_LINE2,currentCompass);
-      relBearing = currentCompass - ownGoal;
-      if (relBearing < 0){
-         relBearing=relBearing+360;
-      }
- //   TextOut(10,LCD_LINE5,"Relative reading" );
-  //  NumOut(10,LCD_LINE6,relBearing);
-  //  TextOut(10, LCD_LINE7, "Current Target:");
-  //  NumOut(10, LCD_LINE8, ownGoal);
-   Wait(200);
-   }
 }
 
 
-task moving() {
-     while(true){
-              HTEnhancedIRSeekerV2(S1, dir, pot);
+void sensors() {
+          HTEnhancedIRSeekerV2(S1);
+          currentCompass = SensorHTCompass(SENSOR_C);
 
-              if ( currentCompass == -ownGoal ) {
-                 move(-100, 100);
-                 move(-100, 100);
-                 move(-100, 100);
-              }
-              if ( Sensor(IN_1) > cal+10 ) {
-                   move(70, 100);
-              } else {
-                if ( dir < 5 ) {
-                   println("Vado a sinistra", 0);
-                   move(40, 80);
-                }
-                if ( dir > 5 ) {
-                   println("Vado a destra", 0);
-                   move(80, 40);
-                }
-                if ( dir == 5 ) {
-                   println("Vado a sinistra", 0);
-                   move(50, 50);
-                }
-              }
+          relBearing = currentCompass - ownGoal;
+
+          if (relBearing < 0){
+             relBearing=relBearing+360;
+          }
+
+          if ( strength > 300 || strength == 0 )
+             possesso = true;
+          else
+             possesso = false;
+             
+          if ( dd < 5 )
+             dir = SINISTRA;
+             
+          if ( dd > 6 )
+             dir = DESTRA;
+             
+          if ( dd == 5 || dd == 6 ) {
+             if ( possesso ) {
+                if ( relBearing < 300 && relBearing > 60 )
+                   dir = SPIN;
+                else
+                   dir = DAVANTILENTO;
+             }
+             else {
+                if ( relBearing < 300 && relBearing > 60 )
+                   dir = SPIN;
+                else
+                   dir = DAVANTI;
+             }
+          }
+          
+          if ( dd == 0 )
+             dir = SPIN;
+
+          if ( Sensor(SENSOR_L) > baseline+15 ) {
+             dir = INDIETRO;
+          }
+}
+
+
+void moving() {
+     Coast(OUT_BC);
+     switch ( dir ) {
+     case DAVANTI:
+          move(M_FAST, M_FAST);
+          println("Vado avanti", relBearing, dd);
+          break;
+     case DESTRA:
+          move(M_FAST, M_SLOW);
+          println("Vado a destra", relBearing, dd);
+          break;
+     case SINISTRA:
+          move(M_SLOW, M_FAST);
+          println("Vado a sinistra", relBearing, dd);
+          break;
+     case INDIETRO:
+          move(M_INV_S, M_INV_S);
+          println("Vado indietro", relBearing, dd);
+          Wait(1500);
+          break;
+     case SPIN:
+          move(M_SLOW, M_INV_S);
+          println("SPIN",relBearing, dd);
+          break;
+     case DAVANTILENTO:
+          move(M_SLOW, M_SLOW);
+          println("DAVANTI LENTO", relBearing, dd);
+          break;
+     default:
+          println("WHAT WHAT WHAT", relBearing, dd);
+          move(M_SLOW, M_SLOW);
      }
 }
 
-task main(){
-   setSensorCompass();
-   SetSensorLight(S2);
-   cal = Sensor(S2);
-   Precedes(moving,nowSensorCompass);
+task main() {
+     SetSensorLight(SENSOR_L);
+     SetSensorLowspeed(SENSOR_C);
+     SetSensorLowspeed(SENSOR_I);
+     
+     setSensorCompass();
+     baseline = Sensor(SENSOR_L);
+     OnFwd(OUT_BC, 100);
+     OnRev(OUT_A, 100);
+     Wait(2300);
+     Coast(OUT_ABC);
+     OnFwd(MOTOR_A, 100);
+     while ( 1 ) {
+           sensors();
+           moving();
+     }
+     
 }
 
-void HTEnhancedIRSeekerV2(const byte  port, int &dir, int &strength)
-{
+void HTEnhancedIRSeekerV2(const byte  port) {
   int cResp;
   byte cmdBuf[] = {0x10, 0x43};   // Read DC signal strengths (skip the dir)
   byte respBuf[];                 // Response Buffer
@@ -106,16 +175,16 @@ void HTEnhancedIRSeekerV2(const byte  port, int &dir, int &strength)
     iMax = 0;
     for (i=1; i<5; i++) if (respBuf[i] > respBuf[iMax]) iMax = i;
     // Calc base DC direction value
-    dir = iMax*2+1;
+    dd = iMax*2+1;
     // Set base dcStrength based on max signal and average
     dcSigSum = respBuf[iMax] + respBuf[5];
     // Check signal strength of neighboring sensor elements
     if ((iMax > 0) && (respBuf[iMax-1] > respBuf[iMax]/2)) {
-        dir--;
+        dd--;
         dcSigSum += respBuf[iMax-1];
     }
     if ((iMax < 4) && (respBuf[iMax+1] > respBuf[iMax]/2)) {
-        dir++;
+        dd++;
         dcSigSum += respBuf[iMax+1];
     }
     // Make DC strength compatible with AC strength. use: sqrt(dcSigSum*500)
@@ -125,15 +194,32 @@ void HTEnhancedIRSeekerV2(const byte  port, int &dir, int &strength)
     // Decide if using DC strength or should read and use AC strength
     if (strength <= 200) {
       // Use AC Dir
-      dir = 0; strength = 0;
+      dd = 0; strength = 0;
       cmdBuf[1] = 0x49; // Recycle rest of cmdBuf from the DC read operation
       cResp=6;
       fSuccess = I2CBytes(port, cmdBuf, cResp, respBuf);
       if (fSuccess) {
-        dir = respBuf[0];
+        dd = respBuf[0];
         // Sum the sensor elements to get strength
-        if (dir > 0) for (i=1; i<=5; i++) strength += respBuf[i];
+        if (dd > 0) for (i=1; i<=5; i++) strength += respBuf[i];
       }
     }
   }
+}
+
+
+void println(string what, int num, int num2){
+     ClearScreen();
+     TextOut(10,LCD_LINE5,what);
+     NumOut(10,LCD_LINE6,num);
+     NumOut(10,LCD_LINE7,num2);
+}
+
+void move(int a, int b) {
+     Acquire(moveMutex);
+     if ( a != 0 )
+        OnFwd(MOTOR_S, a);
+     if ( b != 0 )
+        OnFwd(MOTOR_D, b);
+     Release(moveMutex);
 }
